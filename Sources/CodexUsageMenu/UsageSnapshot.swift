@@ -1,12 +1,13 @@
 import Foundation
 
 struct UsageSnapshot: Equatable {
+    // 两个百分比均表示对应周期内已使用的额度。
     let fiveHourPercent: Int?
     let weeklyPercent: Int?
     let updatedAt: Date
 
     var menuTitle: String {
-        "5h \(display(fiveHourPercent)) · W \(display(weeklyPercent))"
+        "5h 已用 \(display(fiveHourPercent)) · W 已用 \(display(weeklyPercent))"
     }
 
     private func display(_ value: Int?) -> String {

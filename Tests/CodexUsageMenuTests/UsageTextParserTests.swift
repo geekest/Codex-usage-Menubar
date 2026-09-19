@@ -16,24 +16,33 @@ final class UsageTextParserTests: XCTestCase {
         XCTAssertEqual(snapshot?.weeklyPercent, 18)
     }
 
-    func testParsesChineseUsageLimits() {
-        let text = "5 小时使用限额 100% 剩余\n每周使用限额 79% 剩余"
-        let snapshot = UsageTextParser.parse(text)
+    func testConvertsChineseRemainingPercent() {
+        let snapshot = UsageTextParser.parse("5-hour limit 25% 剩余。Weekly limit 80% 剩余。")
+        XCTAssertEqual(snapshot?.fiveHourPercent, 75)
+        XCTAssertEqual(snapshot?.weeklyPercent, 20)
+    }
+
+    func testConvertsEnglishRemainingPercent() {
+        let snapshot = UsageTextParser.parse("5-hour limit 25% remaining. Weekly limit 80% remaining.")
+        XCTAssertEqual(snapshot?.fiveHourPercent, 75)
+        XCTAssertEqual(snapshot?.weeklyPercent, 20)
+    }
+
+    func testKeepsEnglishUsedPercent() {
+        let snapshot = UsageTextParser.parse("5-hour limit 25% used. Weekly limit 80% used.")
+        XCTAssertEqual(snapshot?.fiveHourPercent, 25)
+        XCTAssertEqual(snapshot?.weeklyPercent, 80)
+    }
+
+    func testConvertsRemainingBoundaryPercentsOnce() {
+        let snapshot = UsageTextParser.parse("5-hour limit 0% remaining. Weekly limit 100% remaining.")
         XCTAssertEqual(snapshot?.fiveHourPercent, 100)
-        XCTAssertEqual(snapshot?.weeklyPercent, 79)
+        XCTAssertEqual(snapshot?.weeklyPercent, 0)
     }
 
-    func testParsesPercentBeforeChineseLabel() {
-        let text = "79% 剩余 每周使用限额"
-        let snapshot = UsageTextParser.parse(text)
-        XCTAssertNil(snapshot?.fiveHourPercent)
-        XCTAssertEqual(snapshot?.weeklyPercent, 79)
-    }
-
-    func testRejectsOutOfRangeOrDistantPercentages() {
-        XCTAssertNil(UsageTextParser.parse("每周使用限额 101% 剩余"))
-
-        let distantPercent = "每周使用限额 " + String(repeating: "内容", count: 71) + " 42%"
-        XCTAssertNil(UsageTextParser.parse(distantPercent))
+    func testKeepsUsedBoundaryPercents() {
+        let snapshot = UsageTextParser.parse("5-hour limit 0% used. Weekly limit 100% used.")
+        XCTAssertEqual(snapshot?.fiveHourPercent, 0)
+        XCTAssertEqual(snapshot?.weeklyPercent, 100)
     }
 }

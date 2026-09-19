@@ -5,8 +5,8 @@ import Combine
 final class MenuBarController: NSObject {
     private let store: UsageStore
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let fiveHourItem = NSMenuItem(title: "5 小时：—", action: nil, keyEquivalent: "")
-    private let weeklyItem = NSMenuItem(title: "每周：—", action: nil, keyEquivalent: "")
+    private let fiveHourItem = NSMenuItem(title: "5 小时已使用：—", action: nil, keyEquivalent: "")
+    private let weeklyItem = NSMenuItem(title: "每周已使用：—", action: nil, keyEquivalent: "")
     private let statusItemRow = NSMenuItem(title: "等待首次刷新", action: nil, keyEquivalent: "")
     private var cancellables = Set<AnyCancellable>()
 
@@ -19,7 +19,7 @@ final class MenuBarController: NSObject {
 
     private func configureMenu() {
         guard let button = statusItem.button else { return }
-        button.title = "5h — · W —"
+        button.title = "5h 已用 — · W 已用 —"
         button.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
 
         let menu = NSMenu()
@@ -50,8 +50,8 @@ final class MenuBarController: NSObject {
     private func render(_ snapshot: UsageSnapshot?) {
         guard let snapshot else { return }
         statusItem.button?.title = snapshot.menuTitle
-        fiveHourItem.title = "5 小时：\(snapshot.fiveHourPercent.map { "\($0)%" } ?? "—")"
-        weeklyItem.title = "每周：\(snapshot.weeklyPercent.map { "\($0)%" } ?? "—")"
+        fiveHourItem.title = "5 小时已使用：\(snapshot.fiveHourPercent.map { "\($0)%" } ?? "—")"
+        weeklyItem.title = "每周已使用：\(snapshot.weeklyPercent.map { "\($0)%" } ?? "—")"
     }
 
     @objc private func refresh() { store.refresh() }
