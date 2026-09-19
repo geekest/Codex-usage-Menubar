@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:codex_usage_menu}",
+            "name": "Debug CodexUsageMenu",
+            "target": "CodexUsageMenu",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug CodexUsageMenu"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:codex_usage_menu}",
+            "name": "Release CodexUsageMenu",
+            "target": "CodexUsageMenu",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release CodexUsageMenu"
+        }
+    ]
+}
