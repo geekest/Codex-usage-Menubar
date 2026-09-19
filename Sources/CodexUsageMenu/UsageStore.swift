@@ -117,7 +117,7 @@ final class ChatGPTWebSession: NSObject, WKNavigationDelegate, NSWindowDelegate 
             .map(node => node.getAttribute('aria-label'))
             .filter(Boolean)
             .join('\\n');
-          const hasUsageLabel = /(?:5\\s*hour|5h|five-hour|weekly|week|7\\s*day|seven-day)/i.test(bodyText);
+          const hasUsageLabel = /(?:5\\s*hour|5h|five-hour|weekly|week|7\\s*day|seven-day|5\\s*小时|每周)/i.test(bodyText);
           return { ready: hasUsageLabel, text: [bodyText, aria].join('\\n') };
         })();
         """

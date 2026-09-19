@@ -6,8 +6,14 @@ enum UsageTextParser {
             .replacingOccurrences(of: "\u{00a0}", with: " ")
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
 
-        let fiveHour = firstPercent(near: ["5[\\s-]*hour", "5h", "five-hour"], in: normalized)
-        let weekly = firstPercent(near: ["weekly", "week", "7\\s*day", "seven-day"], in: normalized)
+        let fiveHour = firstPercent(
+            near: ["5[\\s-]*hour", "5h", "five-hour", "5\\s*小时(?:使用限额)?"],
+            in: normalized
+        )
+        let weekly = firstPercent(
+            near: ["weekly", "week", "7\\s*day", "seven-day", "每周(?:使用限额)?"],
+            in: normalized
+        )
 
         guard fiveHour != nil || weekly != nil else { return nil }
         return UsageSnapshot(fiveHourPercent: fiveHour, weeklyPercent: weekly, updatedAt: now)
@@ -31,22 +37,20 @@ enum UsageTextParser {
             guard let labelRegex = try? NSRegularExpression(pattern: "(?i)\(label)") else { continue }
             for labelMatch in labelRegex.matches(in: text, range: textRange) {
                 if let nearest = percents
-                    .map({ percent in
-                        let distance = max(
-                            max(
-                                labelMatch.range.location - NSMaxRange(percent.1),
-                                percent.1.location - NSMaxRange(labelMatch.range)
-                            ),
-                            0
-                        )
-                        let isAfterLabel = percent.1.location >= NSMaxRange(labelMatch.range)
-                        return (percent.0, distance, isAfterLabel)
+                    .map({ percent -> (value: Int, range: NSRange, distance: Int, isAfterLabel: Bool) in
+                        let percentRange = percent.1
+                        let matchDistance = distance(from: labelMatch.range, to: percentRange)
+                        let isAfterLabel = percentRange.location >= NSMaxRange(labelMatch.range)
+                        return (percent.0, percentRange, matchDistance, isAfterLabel)
                     })
-                    .filter({ $0.1 <= 140 })
+                    .filter({ $0.distance <= 140 })
                     .min(by: { left, right in
-                        left.1 == right.1 ? left.2 && !right.2 : left.1 < right.1
+                        if left.distance == right.distance {
+                            return left.isAfterLabel && !right.isAfterLabel
+                        }
+                        return left.distance < right.distance
                     }) {
-                    return nearest.0
+                    return usedPercent(nearest.value, near: nearest.range, in: text)
                 }
             }
         }
