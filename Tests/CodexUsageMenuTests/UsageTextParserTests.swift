@@ -15,4 +15,25 @@ final class UsageTextParserTests: XCTestCase {
         XCTAssertNil(snapshot?.fiveHourPercent)
         XCTAssertEqual(snapshot?.weeklyPercent, 18)
     }
+
+    func testParsesChineseUsageLimits() {
+        let text = "5 小时使用限额 100% 剩余\n每周使用限额 79% 剩余"
+        let snapshot = UsageTextParser.parse(text)
+        XCTAssertEqual(snapshot?.fiveHourPercent, 100)
+        XCTAssertEqual(snapshot?.weeklyPercent, 79)
+    }
+
+    func testParsesPercentBeforeChineseLabel() {
+        let text = "79% 剩余 每周使用限额"
+        let snapshot = UsageTextParser.parse(text)
+        XCTAssertNil(snapshot?.fiveHourPercent)
+        XCTAssertEqual(snapshot?.weeklyPercent, 79)
+    }
+
+    func testRejectsOutOfRangeOrDistantPercentages() {
+        XCTAssertNil(UsageTextParser.parse("每周使用限额 101% 剩余"))
+
+        let distantPercent = "每周使用限额 " + String(repeating: "内容", count: 71) + " 42%"
+        XCTAssertNil(UsageTextParser.parse(distantPercent))
+    }
 }
