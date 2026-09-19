@@ -16,6 +16,13 @@ final class UsageTextParserTests: XCTestCase {
         XCTAssertEqual(snapshot?.weeklyPercent, 18)
     }
 
+    func testParsesChineseUsageLabels() {
+        let text = "5 小时使用限额 37% 已使用。每周使用限额 62% 已使用。"
+        let snapshot = UsageTextParser.parse(text)
+        XCTAssertEqual(snapshot?.fiveHourPercent, 37)
+        XCTAssertEqual(snapshot?.weeklyPercent, 62)
+    }
+
     func testConvertsChineseRemainingPercent() {
         let snapshot = UsageTextParser.parse("5-hour limit 25% 剩余。Weekly limit 80% 剩余。")
         XCTAssertEqual(snapshot?.fiveHourPercent, 75)
