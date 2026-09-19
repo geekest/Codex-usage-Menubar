@@ -8,6 +8,7 @@ struct CodexUsageMenuApp {
         let delegate = AppDelegate()
         app.delegate = delegate
         app.setActivationPolicy(.accessory)
+        app.finishLaunching()
         withExtendedLifetime(delegate) {
             app.run()
         }
