@@ -14,18 +14,40 @@ enum UsageTextParser {
     }
 
     private static func firstPercent(near labels: [String], in text: String) -> Int? {
+        let textRange = NSRange(text.startIndex..., in: text)
+        guard let percentRegex = try? NSRegularExpression(pattern: "(?<!\\d)(\\d{1,3})\\s*%") else {
+            return nil
+        }
+
+        let percents = percentRegex.matches(in: text, range: textRange).compactMap { match -> (Int, NSRange)? in
+            guard let percentRange = Range(match.range(at: 1), in: text),
+                  let percent = Int(text[percentRange]), (0...100).contains(percent) else {
+                return nil
+            }
+            return (percent, match.range)
+        }
+
         for label in labels {
-            let patterns = [
-                "(?i)\(label)[^%]{0,140}?\\b(\\d{1,3})\\s*%",
-                "(?i)\\b(\\d{1,3})\\s*%[^%]{0,140}?\(label)"
-            ]
-            for pattern in patterns {
-                guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-                let range = NSRange(text.startIndex..., in: text)
-                guard let match = regex.firstMatch(in: text, range: range), match.numberOfRanges > 1,
-                      let percentRange = Range(match.range(at: 1), in: text),
-                      let percent = Int(text[percentRange]), (0...100).contains(percent) else { continue }
-                return usedPercent(percent, near: match.range(at: 1), in: text)
+            guard let labelRegex = try? NSRegularExpression(pattern: "(?i)\(label)") else { continue }
+            for labelMatch in labelRegex.matches(in: text, range: textRange) {
+                if let nearest = percents
+                    .map({ percent in
+                        let distance = max(
+                            max(
+                                labelMatch.range.location - NSMaxRange(percent.1),
+                                percent.1.location - NSMaxRange(labelMatch.range)
+                            ),
+                            0
+                        )
+                        let isAfterLabel = percent.1.location >= NSMaxRange(labelMatch.range)
+                        return (percent.0, distance, isAfterLabel)
+                    })
+                    .filter({ $0.1 <= 140 })
+                    .min(by: { left, right in
+                        left.1 == right.1 ? left.2 && !right.2 : left.1 < right.1
+                    }) {
+                    return nearest.0
+                }
             }
         }
         return nil
