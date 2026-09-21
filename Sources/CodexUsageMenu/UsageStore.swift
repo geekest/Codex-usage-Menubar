@@ -3,6 +3,31 @@ import Combine
 import Foundation
 import WebKit
 
+enum UsageNavigationDecision: Equatable {
+    case ignore
+    case readUsage
+    case needsLogin
+    case unknownHost
+}
+
+enum UsageNavigationPolicy {
+    static func decision(for url: URL?, matchesCurrentRequest: Bool) -> UsageNavigationDecision {
+        guard let url, let host = url.host else { return .ignore }
+
+        let acceptedHosts = ["chatgpt.com", "auth.openai.com", "openai.com"]
+        guard acceptedHosts.contains(where: { host == $0 || host.hasSuffix(".\($0)") }) else {
+            return matchesCurrentRequest ? .unknownHost : .ignore
+        }
+
+        if host.hasSuffix("chatgpt.com"), url.path.contains("/codex/settings/usage") {
+            // 用户完成登录时会产生新的导航；此时已不再持有初始请求的 WKNavigation。
+            return .readUsage
+        }
+
+        return matchesCurrentRequest ? .needsLogin : .ignore
+    }
+}
+
 @MainActor
 final class UsageStore: NSObject, ObservableObject {
     @Published private(set) var snapshot: UsageSnapshot?
@@ -91,22 +116,21 @@ final class ChatGPTWebSession: NSObject, WKNavigationDelegate, NSWindowDelegate 
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        guard navigation === activeNavigation else { return }
-        guard let url = webView.url else { return }
-        let acceptedHosts = ["chatgpt.com", "auth.openai.com", "openai.com"]
-        guard let host = url.host, acceptedHosts.contains(where: { host == $0 || host.hasSuffix(".\($0)") }) else {
+        switch UsageNavigationPolicy.decision(
+            for: webView.url,
+            matchesCurrentRequest: navigation === activeNavigation
+        ) {
+        case .ignore:
+            return
+        case .unknownHost:
             invalidateCurrentRequest()
             onLoadFailure?("登录页面跳转到了未知域名")
-            return
-        }
-
-        guard host.hasSuffix("chatgpt.com"), url.path.contains("/codex/settings/usage") else {
+        case .needsLogin:
             invalidateCurrentRequest()
             onLoginRequired?()
-            return
+        case .readUsage:
+            readPageText(requestID: requestID, attempt: 1)
         }
-
-        readPageText(requestID: requestID, attempt: 1)
     }
 
     private func readPageText(requestID: UUID, attempt: Int) {
