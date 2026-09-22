@@ -36,7 +36,7 @@ enum UsageTextParser {
         for label in labels {
             guard let labelRegex = try? NSRegularExpression(pattern: "(?i)\(label)") else { continue }
             for labelMatch in labelRegex.matches(in: text, range: textRange) {
-                if let nearest = percents
+                let candidates = percents
                     .map({ percent -> (value: Int, range: NSRange, distance: Int, isAfterLabel: Bool) in
                         let percentRange = percent.1
                         let matchDistance = distance(from: labelMatch.range, to: percentRange)
@@ -44,12 +44,13 @@ enum UsageTextParser {
                         return (percent.0, percentRange, matchDistance, isAfterLabel)
                     })
                     .filter({ $0.distance <= 140 })
-                    .min(by: { left, right in
-                        if left.distance == right.distance {
-                            return left.isAfterLabel && !right.isAfterLabel
-                        }
-                        return left.distance < right.distance
-                    }) {
+
+                let nearest = candidates
+                    .filter(\.isAfterLabel)
+                    .min(by: { $0.distance < $1.distance })
+                    ?? candidates.min(by: { $0.distance < $1.distance })
+
+                if let nearest {
                     return usedPercent(nearest.value, near: nearest.range, in: text)
                 }
             }
