@@ -5,9 +5,49 @@ struct UsageSnapshot: Equatable {
     let fiveHourPercent: Int?
     let weeklyPercent: Int?
     let updatedAt: Date
+}
 
-    var menuTitle: String {
-        "5h 已用 \(display(fiveHourPercent)) · W 已用 \(display(weeklyPercent))"
+enum UsageDisplayMode: Equatable {
+    case used
+    case remaining
+
+    var toggleTitle: String {
+        switch self {
+        case .used: return "显示剩余"
+        case .remaining: return "显示已使用"
+        }
+    }
+
+    var next: UsageDisplayMode {
+        self == .used ? .remaining : .used
+    }
+
+    func menuTitle(fiveHourUsedPercent: Int?, weeklyUsedPercent: Int?) -> String {
+        "5h \(shortLabel) \(display(percent(from: fiveHourUsedPercent))) · "
+            + "W \(shortLabel) \(display(percent(from: weeklyUsedPercent)))"
+    }
+
+    func detailTitle(period: String, usedPercent: Int?) -> String {
+        "\(period)\(detailLabel)：\(display(percent(from: usedPercent)))"
+    }
+
+    func percent(from usedPercent: Int?) -> Int? {
+        guard let usedPercent else { return nil }
+        return self == .used ? usedPercent : 100 - usedPercent
+    }
+
+    private var shortLabel: String {
+        switch self {
+        case .used: return "已用"
+        case .remaining: return "剩余"
+        }
+    }
+
+    private var detailLabel: String {
+        switch self {
+        case .used: return "已使用"
+        case .remaining: return "剩余"
+        }
     }
 
     private func display(_ value: Int?) -> String {
