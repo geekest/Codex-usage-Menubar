@@ -11,20 +11,29 @@ enum UsageNavigationDecision: Equatable {
 }
 
 enum UsageNavigationPolicy {
+    static func shouldObserveUsage(in url: URL?) -> Bool {
+        guard let url, let host = url.host else { return false }
+        return matches(host: host, domain: "chatgpt.com")
+    }
+
     static func decision(for url: URL?, matchesCurrentRequest: Bool) -> UsageNavigationDecision {
         guard let url, let host = url.host else { return .ignore }
 
         let acceptedHosts = ["chatgpt.com", "auth.openai.com", "openai.com"]
-        guard acceptedHosts.contains(where: { host == $0 || host.hasSuffix(".\($0)") }) else {
+        guard acceptedHosts.contains(where: { matches(host: host, domain: $0) }) else {
             return matchesCurrentRequest ? .unknownHost : .ignore
         }
 
-        if host.hasSuffix("chatgpt.com"), url.path.contains("/codex/settings/usage") {
+        if matches(host: host, domain: "chatgpt.com"), url.path.contains("/codex/settings/usage") {
             // 用户完成登录时会产生新的导航；此时已不再持有初始请求的 WKNavigation。
             return .readUsage
         }
 
         return matchesCurrentRequest ? .needsLogin : .ignore
+    }
+
+    private static func matches(host: String, domain: String) -> Bool {
+        host == domain || host.hasSuffix(".\(domain)")
     }
 }
 
@@ -80,8 +89,23 @@ final class ChatGPTWebSession: NSObject, WKNavigationDelegate, NSWindowDelegate 
     private let loginWindow: NSWindow
     private let readRetryInterval: TimeInterval = 0.5
     private let maximumReadAttempts = 10
+    private let pageTextScript = """
+    (() => {
+      const bodyText = document.body ? document.body.innerText : '';
+      const aria = Array.from(document.querySelectorAll('[aria-label]'))
+        .map(node => node.getAttribute('aria-label'))
+        .filter(Boolean)
+        .join('\\n');
+      const text = [bodyText, aria].join('\\n');
+      const ready = /(?:5\\s*hour|5h|five-hour|weekly|week|7\\s*day|seven-day|5\\s*小时|每周)/i.test(text);
+      return { ready, text };
+    })();
+    """
     private var requestID = UUID()
     private weak var activeNavigation: WKNavigation?
+    private var pageObservationTimer: Timer?
+    private var pageObservationID = UUID()
+    private var pageProbeInFlight = false
 
     override init() {
         let configuration = WKWebViewConfiguration()
@@ -105,6 +129,7 @@ final class ChatGPTWebSession: NSObject, WKNavigationDelegate, NSWindowDelegate 
     func showLoginWindow() {
         loginWindow.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        startObservingVisiblePage()
         if webView.url == nil { loadUsagePage() }
     }
 
@@ -134,24 +159,11 @@ final class ChatGPTWebSession: NSObject, WKNavigationDelegate, NSWindowDelegate 
     }
 
     private func readPageText(requestID: UUID, attempt: Int) {
-        let script = """
-        (() => {
-          const bodyText = document.body ? document.body.innerText : '';
-          const aria = Array.from(document.querySelectorAll('[aria-label]'))
-            .map(node => node.getAttribute('aria-label'))
-            .filter(Boolean)
-            .join('\\n');
-          const hasUsageLabel = /(?:5\\s*hour|5h|five-hour|weekly|week|7\\s*day|seven-day|5\\s*小时|每周)/i.test(bodyText);
-          return { ready: hasUsageLabel, text: [bodyText, aria].join('\\n') };
-        })();
-        """
-        webView.evaluateJavaScript(script) { [weak self] result, error in
+        evaluateUsagePageText { [weak self] text in
             guard let self, requestID == self.requestID else { return }
 
-            if error == nil,
-               let response = result as? [String: Any],
-               response["ready"] as? Bool == true,
-               let text = response["text"] as? String {
+            if let text {
+                self.stopObservingVisiblePage()
                 self.invalidateCurrentRequest()
                 self.onPageText?(text)
                 return
@@ -170,6 +182,63 @@ final class ChatGPTWebSession: NSObject, WKNavigationDelegate, NSWindowDelegate 
         }
     }
 
+    private func startObservingVisiblePage() {
+        guard pageObservationTimer == nil else { return }
+
+        let observationID = UUID()
+        pageObservationID = observationID
+        observeVisiblePage(observationID: observationID)
+
+        let timer = Timer(timeInterval: readRetryInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.observeVisiblePage(observationID: observationID)
+            }
+        }
+        pageObservationTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func observeVisiblePage(observationID: UUID) {
+        guard observationID == pageObservationID,
+              loginWindow.isVisible,
+              !pageProbeInFlight,
+              UsageNavigationPolicy.shouldObserveUsage(in: webView.url) else {
+            return
+        }
+
+        pageProbeInFlight = true
+        evaluateUsagePageText { [weak self] text in
+            guard let self else { return }
+            guard observationID == self.pageObservationID else { return }
+            self.pageProbeInFlight = false
+            guard let text else { return }
+
+            self.stopObservingVisiblePage()
+            self.invalidateCurrentRequest()
+            self.onPageText?(text)
+        }
+    }
+
+    private func stopObservingVisiblePage() {
+        pageObservationTimer?.invalidate()
+        pageObservationTimer = nil
+        pageObservationID = UUID()
+        pageProbeInFlight = false
+    }
+
+    private func evaluateUsagePageText(completion: @escaping (String?) -> Void) {
+        webView.evaluateJavaScript(pageTextScript) { result, error in
+            guard error == nil,
+                  let response = result as? [String: Any],
+                  response["ready"] as? Bool == true,
+                  let text = response["text"] as? String else {
+                completion(nil)
+                return
+            }
+            completion(text)
+        }
+    }
+
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         guard navigation === activeNavigation else { return }
         invalidateCurrentRequest()
@@ -183,6 +252,7 @@ final class ChatGPTWebSession: NSObject, WKNavigationDelegate, NSWindowDelegate 
     }
 
     func windowWillClose(_ notification: Notification) {
+        stopObservingVisiblePage()
         invalidateCurrentRequest()
     }
 

@@ -2,6 +2,18 @@ import XCTest
 @testable import CodexUsageMenu
 
 final class UsageTextParserTests: XCTestCase {
+    func testObservesTrustedChatGPTPageWithoutDependingOnUsagePath() {
+        let url = URL(string: "https://chatgpt.com/codex/settings/analysis")!
+
+        XCTAssertTrue(UsageNavigationPolicy.shouldObserveUsage(in: url))
+    }
+
+    func testDoesNotObserveLookalikeChatGPTHost() {
+        let url = URL(string: "https://notchatgpt.com/codex/settings/analysis")!
+
+        XCTAssertFalse(UsageNavigationPolicy.shouldObserveUsage(in: url))
+    }
+
     func testReadsUsagePageAfterLoginNavigationDoesNotMatchOriginalRequest() {
         let url = URL(string: "https://chatgpt.com/codex/settings/usage")!
 
