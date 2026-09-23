@@ -7,7 +7,10 @@ final class MenuBarController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let fiveHourItem = NSMenuItem(title: "5 小时已使用：—", action: nil, keyEquivalent: "")
     private let weeklyItem = NSMenuItem(title: "每周已使用：—", action: nil, keyEquivalent: "")
+    private let displayModeItem = NSMenuItem(title: "显示剩余", action: #selector(toggleDisplayMode), keyEquivalent: "")
     private let statusItemRow = NSMenuItem(title: "等待首次刷新", action: nil, keyEquivalent: "")
+    private var displayMode: UsageDisplayMode = .used
+    private var latestSnapshot: UsageSnapshot?
     private var cancellables = Set<AnyCancellable>()
 
     init(store: UsageStore) {
@@ -25,6 +28,7 @@ final class MenuBarController: NSObject {
         let menu = NSMenu()
         menu.addItem(fiveHourItem)
         menu.addItem(weeklyItem)
+        menu.addItem(displayModeItem)
         menu.addItem(.separator())
         menu.addItem(statusItemRow)
         menu.addItem(.separator())
@@ -48,10 +52,25 @@ final class MenuBarController: NSObject {
     }
 
     private func render(_ snapshot: UsageSnapshot?) {
-        guard let snapshot else { return }
-        statusItem.button?.title = snapshot.menuTitle
-        fiveHourItem.title = "5 小时已使用：\(snapshot.fiveHourPercent.map { "\($0)%" } ?? "—")"
-        weeklyItem.title = "每周已使用：\(snapshot.weeklyPercent.map { "\($0)%" } ?? "—")"
+        latestSnapshot = snapshot
+        statusItem.button?.title = displayMode.menuTitle(
+            fiveHourUsedPercent: snapshot?.fiveHourPercent,
+            weeklyUsedPercent: snapshot?.weeklyPercent
+        )
+        fiveHourItem.title = displayMode.detailTitle(
+            period: "5 小时",
+            usedPercent: snapshot?.fiveHourPercent
+        )
+        weeklyItem.title = displayMode.detailTitle(
+            period: "每周",
+            usedPercent: snapshot?.weeklyPercent
+        )
+        displayModeItem.title = displayMode.toggleTitle
+    }
+
+    @objc private func toggleDisplayMode() {
+        displayMode = displayMode.next
+        render(latestSnapshot)
     }
 
     @objc private func refresh() { store.refresh() }
